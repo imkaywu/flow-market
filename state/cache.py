@@ -1,18 +1,20 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 
-import pandas as pd
+from data.normalize import Bar
+from typing import Deque
 
 
 class RollingCache:
-    def __init__(self):
-        self.data = defaultdict(pd.DataFrame)
-
-    def update(self, symbol, new_bars):
-        self.data[symbol] = (
-            pd.concat([self.data[symbol], new_bars])
-            .drop_duplicates("datetime")
-            .tail(5000)
+    def __init__(self, max_bars: int = 500):
+        self.data: dict[str, Deque[Bar]] = defaultdict(
+            lambda: deque(maxlen=max_bars)
         )
 
-    def get(self, symbol):
-        return self.data[symbol]
+    def add(self, bar: Bar):
+        self.data[bar.symbol].append(bar)
+
+    def get(self, symbol: str) -> list[Bar]:
+        return list(self.data[symbol])
+
+    def ready(self, symbol: str, min_bars: int = 30) -> bool:
+        return len(self.data[symbol]) >= min_bars

@@ -1,1 +1,5 @@
 pandas
+numpy
+yfinance
+alpaca
+requests

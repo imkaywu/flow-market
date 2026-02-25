@@ -1,1 +1,1 @@
-from signals import *
+from .signals import *
