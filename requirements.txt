@@ -1,5 +1,5 @@
 pandas
 numpy
 yfinance
-alpaca
 requests
+alpaca-py
