@@ -13,6 +13,18 @@ import pandas as pd
 import config
 from data.normalize import PriceData
 
+# Try to load local config with API keys
+try:
+    import config_local as local_config
+    if hasattr(local_config, 'ALPACA_API_KEY') and local_config.ALPACA_API_KEY:
+        os.environ.setdefault("ALPACA_API_KEY", local_config.ALPACA_API_KEY)
+    if hasattr(local_config, 'ALPACA_SECRET_KEY') and local_config.ALPACA_SECRET_KEY:
+        os.environ.setdefault("ALPACA_SECRET_KEY", local_config.ALPACA_SECRET_KEY)
+    if hasattr(local_config, 'FINNHUB_API_KEY') and local_config.FINNHUB_API_KEY:
+        os.environ.setdefault("FINNHUB_API_KEY", local_config.FINNHUB_API_KEY)
+except ImportError:
+    pass
+
 # Import adapters
 from data.adapters.alpaca import AlpacaFetcher
 from data.adapters.finnhub import FinnhubFetcher

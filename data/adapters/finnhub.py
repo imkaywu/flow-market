@@ -14,12 +14,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-try:
-    import requests
-    HAS_REQUESTS = True
-except ImportError:
-    HAS_REQUESTS = False
-
+import finnhub
 import pandas as pd
 
 import config
@@ -39,8 +34,6 @@ class FinnhubFetcher:
     - FINNHUB_API_KEY: Your Finnhub API key
     """
     
-    BASE_URL = "https://finnhub.io/api/v1"
-    
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -55,9 +48,17 @@ class FinnhubFetcher:
         """
         self.api_key = api_key or os.environ.get("FINNHUB_API_KEY", "")
         self.timeout = timeout
+        self._client = None
         
         self.rate_limit_remaining = 60
         self.rate_limit_reset = datetime.now()
+    
+    @property
+    def client(self) -> Optional[finnhub.Client]:
+        """Lazy initialization of Finnhub client."""
+        if self._client is None and self.api_key:
+            self._client = finnhub.Client(api_key=self.api_key)
+        return self._client
     
     def is_configured(self) -> bool:
         """Check if API key is configured."""
@@ -71,14 +72,6 @@ class FinnhubFetcher:
                 return True
             return False
         return True
-    
-    def _update_rate_limit(self, response):
-        """Update rate limit info from response headers."""
-        if 'x-ratelimit-remaining' in response.headers:
-            self.rate_limit_remaining = int(response.headers['x-ratelimit-remaining'])
-        if 'x-ratelimit-reset' in response.headers:
-            reset_ts = int(response.headers['x-ratelimit-reset'])
-            self.rate_limit_reset = datetime.fromtimestamp(reset_ts)
     
     def fetch_candles(
         self,
@@ -114,26 +107,15 @@ class FinnhubFetcher:
         if start is None:
             start = end - timedelta(days=1)
         
-        params = {
-            "symbol": symbol,
-            "resolution": resolution,
-            "from": int(start.timestamp()),
-            "to": int(end.timestamp()),
-            "token": self.api_key
-        }
-        
-        url = f"{self.BASE_URL}/stock/candle"
-        
         try:
-            response = requests.get(url, params=params, timeout=self.timeout)
-            self._update_rate_limit(response)
+            data = self.client.stock_candles(
+                symbol,
+                resolution,
+                int(start.timestamp()),
+                int(end.timestamp())
+            )
             
-            if response.status_code == 429:
-                print(f"  [RATE LIMIT] Finnhub rate limited")
-                return None
-            
-            response.raise_for_status()
-            data = response.json()
+            self.rate_limit_remaining -= 1
             
             if data.get('s') == 'no_data':
                 print(f"  [WARN] No data for {symbol}")
@@ -143,7 +125,10 @@ class FinnhubFetcher:
                 print(f"  [ERROR] API error for {symbol}: {data}")
                 return None
             
-            # Convert to DataFrame
+            if not data.get('t'):
+                print(f"  [WARN] No timestamp data for {symbol}")
+                return None
+            
             df = pd.DataFrame({
                 'timestamp': pd.to_datetime(data['t'], unit='s'),
                 'Open': data['o'],
@@ -157,6 +142,12 @@ class FinnhubFetcher:
             
             return df
             
+        except finnhub.FinnhubAPIException as e:
+            if e.status_code == 403:
+                print(f"  [ERROR] No access to candles for {symbol}. API key may not support this endpoint.")
+            else:
+                print(f"  [ERROR] Failed to fetch {symbol}: {e}")
+            return None
         except Exception as e:
             print(f"  [ERROR] Failed to fetch {symbol}: {e}")
             return None
@@ -214,14 +205,12 @@ class FinnhubFetcher:
             if price_data:
                 results[symbol] = price_data
             
-            # Rate limiting
             if not self._check_rate_limit():
                 wait_time = (self.rate_limit_reset - datetime.now()).total_seconds()
                 if wait_time > 0:
                     print(f"  [RATE LIMIT] Waiting {wait_time:.0f}s...")
                     time.sleep(wait_time)
             else:
-                # Small delay between requests
                 time.sleep(0.5)
         
         print(f"  -> Fetched {len(results)}/{len(symbols)} symbols via Finnhub")
@@ -241,19 +230,13 @@ class FinnhubFetcher:
         if not self.is_configured():
             return None
         
-        params = {
-            "symbol": symbol,
-            "token": self.api_key
-        }
-        
-        url = f"{self.BASE_URL}/quote"
-        
         try:
-            response = requests.get(url, params=params, timeout=self.timeout)
-            self._update_rate_limit(response)
-            response.raise_for_status()
-            return response.json()
+            quote = self.client.quote(symbol)
+            self.rate_limit_remaining -= 1
+            return quote
             
+        except finnhub.FinnhubAPIException as e:
+            print(f"  [ERROR] Failed to get quote for {symbol}: {e}")
         except Exception as e:
             print(f"  [ERROR] Failed to get quote for {symbol}: {e}")
         
@@ -272,23 +255,17 @@ class FinnhubFetcher:
         if not self.is_configured():
             return None
         
-        params = {
-            "symbol": symbol,
-            "token": self.api_key
-        }
-        
-        url = f"{self.BASE_URL}/stock/profile2"
-        
         try:
-            response = requests.get(url, params=params, timeout=self.timeout)
-            self._update_rate_limit(response)
+            profile = self.client.company_profile2(symbol)
+            self.rate_limit_remaining -= 1
             
-            if response.status_code == 404:
+            if not profile:
                 return None
             
-            response.raise_for_status()
-            return response.json()
+            return profile
             
+        except finnhub.FinnhubAPIException as e:
+            print(f"  [ERROR] Failed to get profile for {symbol}: {e}")
         except Exception as e:
             print(f"  [ERROR] Failed to get profile for {symbol}: {e}")
         

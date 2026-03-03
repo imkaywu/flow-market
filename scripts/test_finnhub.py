@@ -5,7 +5,9 @@ Tests fetching market data via Finnhub API.
 
 Get free API key at https://finnhub.io/
 
-Run with:
+Usage:
+    # Option 1: Create config_local.py with your keys (see config_example.py)
+    # Option 2: Set environment variable
     export FINNHUB_API_KEY=your_key
     python scripts/test_finnhub.py
 """
@@ -13,8 +15,19 @@ import sys
 import os
 from datetime import datetime
 
+import pandas as pd
+
 # Add parent directory to path
 sys.path.insert(0, '.')
+
+# Try to import local config
+try:
+    import config_local as local_config
+    # Override with local config if available
+    if hasattr(local_config, 'FINNHUB_API_KEY') and local_config.FINNHUB_API_KEY:
+        os.environ["FINNHUB_API_KEY"] = local_config.FINNHUB_API_KEY
+except ImportError:
+    pass
 
 from data.adapters.finnhub import FinnhubFetcher
 
@@ -54,13 +67,21 @@ def test_finnhub_fetch():
         print("❌ Finnhub not configured. Skipping test.")
         return False
     
+    us_success = False
+    hk_success = False
+    
     # Test US symbols
     us_symbols = ["AAPL", "MSFT", "GOOGL"]
     
     print(f"\nFetching US: {us_symbols}")
     print("-"*40)
     
-    us_results = fetcher.fetch_batch(us_symbols)
+    try:
+        us_results = fetcher.fetch_batch(us_symbols)
+        us_success = len(us_results) > 0
+    except Exception as e:
+        print(f"  [ERROR] US fetch failed: {e}")
+        us_results = {}
     
     print(f"\n✅ US: {len(us_results)}/{len(us_symbols)} symbols")
     
@@ -79,7 +100,12 @@ def test_finnhub_fetch():
     print(f"Fetching HK: {hk_symbols}")
     print("-"*40)
     
-    hk_results = fetcher.fetch_batch(hk_symbols)
+    try:
+        hk_results = fetcher.fetch_batch(hk_symbols)
+        hk_success = len(hk_results) > 0
+    except Exception as e:
+        print(f"  [ERROR] HK fetch failed: {e}")
+        hk_results = {}
     
     print(f"\n✅ HK: {len(hk_results)}/{len(hk_symbols)} symbols")
     
@@ -90,7 +116,7 @@ def test_finnhub_fetch():
         if not df.empty:
             print(f"   Latest: ${df['Close'].iloc[-1]:.2f}")
     
-    return len(us_results) > 0 or len(hk_results) > 0
+    return us_success or hk_success
 
 
 def test_quote():

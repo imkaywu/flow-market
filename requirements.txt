@@ -3,3 +3,4 @@ numpy
 yfinance
 requests
 alpaca-py
+finnhub-python
