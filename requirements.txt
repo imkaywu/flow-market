@@ -4,3 +4,4 @@ yfinance
 requests
 alpaca-py
 finnhub-python
+alpha-vantage

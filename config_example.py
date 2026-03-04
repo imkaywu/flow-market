@@ -25,6 +25,10 @@ ALPACA_USE_PAPER = True  # Set to False for live trading
 # Get free key at: https://finnhub.io/
 FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
 
+# Alpha Vantage API Keys (US Stocks)
+# Get free key at: https://www.alphavantage.co/support/#api-key
+ALPHAVANTAGE_API_KEY = os.environ.get("ALPHAVANTAGE_API_KEY", "")
+
 # NewsAPI (optional - for more news sources)
 # Get free key at: https://newsapi.org/
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "")
